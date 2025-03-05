@@ -1,6 +1,7 @@
 #![deny(missing_debug_implementations)]
 #![deny(missing_docs)]
 #![deny(unused_results)]
+#![deny(dead_code)]
 #![doc(html_root_url = "https://docs.rs/minisketch_rs/0.1.9")]
 
 //! # minisketch-rs
@@ -56,7 +57,51 @@ mod ffi {
 
     unsafe impl Send for minisketch {}
 }
-
+/** Compute the capacity needed to achieve a certain rate of false positives.
+ *
+ * A sketch with capacity c and no more than c elements can always be decoded
+ * correctly. However, if it has more than c elements, or contains just random
+ * bytes, it is possible that it will still decode, but the result will be
+ * nonsense. This can be counteracted by increasing the capacity slightly.
+ *
+ * Given a field size bits, an intended number of elements that can be decoded
+ * max_elements, and a false positive probability of 1 in 2**fpbits, this
+ * function computes the necessary capacity. It is only guaranteed to be
+ * accurate up to fpbits=256.
+ */
+pub fn compute_capacity(bits: u32, max_elements: usize, fpbits: u32) -> usize {
+    unsafe {
+        ffi::minisketch_compute_capacity(bits, max_elements as crate::ffi::size_t, fpbits) as usize
+    }
+}
+/** Compute what max_elements can be decoded for a certain rate of false positives.
+ *
+ * This is the inverse operation of minisketch_compute_capacity. It determines,
+ * given a field size bits, a capacity of a sketch, and an acceptable false
+ * positive probability of 1 in 2**fpbits, what the maximum allowed
+ * max_elements value is. If no value of max_elements would give the desired
+ * false positive probability, 0 is returned.
+ *
+ * Note that this is not an exact inverse of minisketch_compute_capacity. For
+ * example, with bits=32, fpbits=16, and max_elements=8,
+ * minisketch_compute_capacity will return 9, as capacity 8 would only have a
+ * false positive chance of 1 in 2^15.3. Increasing the capacity to 9 however
+ * decreases the fp chance to 1 in 2^47.3, enough for max_elements=9 (with fp
+ * chance of 1 in 2^18.5). Therefore, minisketch_compute_max_elements with
+ * capacity=9 will return 9.
+ */
+pub fn compute_max_elements(bits: u32, capacity: usize, fpbits: u32) -> usize {
+    unsafe {
+        ffi::minisketch_compute_max_elements(bits, capacity as crate::ffi::size_t, fpbits) as usize
+    }
+}
+/** Determine if the a combination of bits and implementation number is available.
+ *
+ * Returns 1 if it is, 0 otherwise.
+ */
+pub fn implementation_supported(bits: u32, implementation: u32) -> bool {
+    unsafe { crate::ffi::minisketch_implementation_supported(bits, implementation) != 0 }
+}
 /// Describes decoded sketches and holding underlying opaque type inside.
 pub struct Minisketch {
     inner: *mut ffi::minisketch,
@@ -124,7 +169,7 @@ impl Minisketch {
 
     /// Returns capacity of a sketch in number of elements.
     pub fn capacity(&self) -> usize {
-        unsafe { ffi::minisketch_capacity(self.inner) as usize } 
+        unsafe { ffi::minisketch_capacity(self.inner) as usize }
     }
 
     /// Returns implementation version number.
@@ -134,7 +179,7 @@ impl Minisketch {
 
     /// Returns the size in bytes for serializing a given sketch.
     pub fn serialized_size(&self) -> usize {
-        unsafe { ffi::minisketch_serialized_size(self.inner) as usize } 
+        unsafe { ffi::minisketch_serialized_size(self.inner) as usize }
     }
 
     /// Adds a `u64` element to a sketch.
@@ -267,8 +312,9 @@ impl Minisketch {
     /// # Ok::<(), minisketch_rs::MinisketchError>(())
     /// ```
     pub fn decode(&self, elements: &mut [u64]) -> Result<usize, MinisketchError> {
-        let result =
-            unsafe { ffi::minisketch_decode(self.inner, elements.len() as _, elements.as_mut_ptr()) };
+        let result = unsafe {
+            ffi::minisketch_decode(self.inner, elements.len() as _, elements.as_mut_ptr())
+        };
 
         if result == -1 {
             Err(MinisketchError::new("Sketch decoding failed"))
