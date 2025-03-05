@@ -1,7 +1,6 @@
 #![deny(missing_debug_implementations)]
 #![deny(missing_docs)]
 #![deny(unused_results)]
-#![deny(dead_code)]
 #![doc(html_root_url = "https://docs.rs/minisketch_rs/0.1.9")]
 
 //! # minisketch-rs
@@ -86,7 +85,7 @@ impl Minisketch {
         implementation: u32,
         capacity: usize,
     ) -> Result<Self, MinisketchError> {
-        let inner = unsafe { ffi::minisketch_create(bits, implementation, capacity) };
+        let inner = unsafe { ffi::minisketch_create(bits, implementation, capacity as _) };
 
         if !inner.is_null() {
             Ok(Minisketch {
@@ -125,7 +124,7 @@ impl Minisketch {
 
     /// Returns capacity of a sketch in number of elements.
     pub fn capacity(&self) -> usize {
-        unsafe { ffi::minisketch_capacity(self.inner) }
+        unsafe { ffi::minisketch_capacity(self.inner) as usize } 
     }
 
     /// Returns implementation version number.
@@ -135,7 +134,7 @@ impl Minisketch {
 
     /// Returns the size in bytes for serializing a given sketch.
     pub fn serialized_size(&self) -> usize {
-        unsafe { ffi::minisketch_serialized_size(self.inner) }
+        unsafe { ffi::minisketch_serialized_size(self.inner) as usize } 
     }
 
     /// Adds a `u64` element to a sketch.
@@ -238,7 +237,7 @@ impl Minisketch {
         if capacity == 0 {
             Err(MinisketchError::new("Merge is failed"))
         } else {
-            Ok(capacity)
+            Ok(capacity as usize)
         }
     }
 
@@ -269,7 +268,7 @@ impl Minisketch {
     /// ```
     pub fn decode(&self, elements: &mut [u64]) -> Result<usize, MinisketchError> {
         let result =
-            unsafe { ffi::minisketch_decode(self.inner, elements.len(), elements.as_mut_ptr()) };
+            unsafe { ffi::minisketch_decode(self.inner, elements.len() as _, elements.as_mut_ptr()) };
 
         if result == -1 {
             Err(MinisketchError::new("Sketch decoding failed"))
